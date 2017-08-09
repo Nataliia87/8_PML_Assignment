@@ -1,0 +1,93 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Nataliia Matvieienko"
+date: '8 July 2017'
+output: html_document
+---
+##Introduction
+  Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+  
+  The goal of my project is to predict the manner in which people did the exercise in testing data set. I will use as much as possible variables to predict estimate, will fit 3 different models to data and choose what is beter. 
+
+## Loading data,Cleaning & Exploratory analysis
+
+```{r}
+data <- read.csv("pml-training.csv", header=T, na.strings=c("","NA"))
+data<-data[,colSums(is.na(data))==0]
+dim(data)
+```
+
+
+```{r}
+set.seed(1234)
+library(caret)
+inTrain<-createDataPartition(y=data$classe,p=0.7,list=FALSE)
+training<-data[inTrain,]
+testing<-data[-inTrain,]
+dim(training)
+names(training)
+```
+
+```{r}
+library(plot3D)
+suppressWarnings(plot3D::points3D(
++         training$magnet_arm_x, 
++         training$magnet_arm_y, 
++         training$magnet_arm_z, col=training$classe,main="Magnet Arm by Activity",pch=20, cex=0.8))
+suppressWarnings(plot3D::points3D(
++         training$magnet_forearm_x, 
++         training$magnet_forearm_y, 
++         training$magnet_forearm_z, col=training$classe,main="Magnet Forearm by Activity",pch=20, cex=0.8))
+```
+
+We see from this plots, that there is a pattern that depends on activity type.
+
+We will not use first 5 columns as predictors.
+```{r}
+training<-training[,6:ncol(training)]
+```
+
+##Fitting Prediction models
+Firstly lets try the simplest model - Decision Trees.
+```{r}
+set.seed(1234)
+mod1<-train(classe~.,method="rpart",data=training)
+library(rattle)
+fancyRpartPlot(mod1$finalModel)
+confusionMatrix(predict(mod1,testing),testing$classe)
+```
+
+As we see this model is not good. It's accuracy is 49.57%, it has a lot of errors. So we will not use it further.
+
+The second one will be Boosting:
+```{r}
+set.seed(1234)
+modControl <- trainControl(method="cv",number=5,verboseIter=FALSE)
+mod2<-train(classe~.,method="gbm",data=training,trControl=modControl,verbose=FALSE)
+plot(mod2, ylim=c(0.7, 1))
+pred2<-predict(mod2,testing)
+confusionMatrix(pred2,testing$classe)
+```
+
+This method is definitely beter. We have less errors and accuracy is 98.83%. This is a great value.
+
+And the third we will try random Forests^
+```{r}
+library(randomForest)
+mod3<- randomForest(classe ~ ., data=training)
+plot(mod3)
+pred3<-predict(mod3,testing)
+confusionMatrix(pred3,testing$classe)
+```
+
+This model has beter accuracy - 99.86%. And we will use it to work with our test data set.
+
+## Predicting results on testing data set
+```{r}
+datatest <- read.csv("pml-testing.csv", header=T, na.strings=c("","NA"))
+datatest<-datatest[,colSums(is.na(data))==0]
+final<- predict(mod2, newdata=datatest)
+final
+```
+
+So, now we now in which way people were doing observed exersises.
